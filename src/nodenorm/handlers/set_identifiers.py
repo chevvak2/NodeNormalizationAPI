@@ -1,15 +1,17 @@
 # set_id.py
 # Code related to generating IDs for sets (as in https://github.com/TranslatorSRI/NodeNormalization/issues/256).
 import dataclasses
+import json
 import logging
 import uuid
 from typing import Optional
 
-from biothings.web.handlers import BaseAPIHandler
-from biothings.web.services.namespace import BiothingsNamespace
+from biothings.web.handlers import BaseHandler
+
 from tornado.web import HTTPError
 
 from nodenorm.handlers.normalized_nodes import get_normalized_nodes
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 
 @dataclasses.dataclass()
@@ -22,7 +24,7 @@ class SetIDResponse:
     setid: Optional[str] = None
 
 
-class SetIdentifierHandler(BaseAPIHandler):
+class SetIdentifierHandler(BaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs
@@ -53,18 +55,20 @@ class SetIdentifierHandler(BaseAPIHandler):
         self.finish(set_identifiers)
 
     async def post(self):
-        curie_arguments = self.args_json
-        if len(curie_arguments) == 0:
+        post_body: list[dict] = json.loads(self.request.body)
+        if len(post_body) == 0:
             raise HTTPError(
                 detail="Missing JSON body, there must be at least one curie to generate a set identifier",
                 status_code=400,
             )
 
-        set_identifiers = []
-        for group in curie_arguments:
+        # We have to make a minor change to the API to ensure we're avoiding a security concern
+        # enforced by tornado, so we return a dictionary here instead of a list
+        set_identifiers = {}
+        for index, group in enumerate(post_body):
             curies = group.get("curies", [])
             conflations = group.get("conflations", [])
-            set_identifiers.append(await generate_setid(self.biothings, curies, conflations))
+            set_identifiers[index] = await generate_setid(self.biothings, curies, conflations)
 
         if not set_identifiers:
             raise HTTPError(detail="Error occurred during processing.", status_code=500)
@@ -72,7 +76,9 @@ class SetIdentifierHandler(BaseAPIHandler):
         self.finish(set_identifiers)
 
 
-async def generate_setid(biothings_metadata: BiothingsNamespace, curies: list[str], conflations: list[str]) -> dict:
+async def generate_setid(
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: list[str]
+) -> dict:
     """
     Generate a SetID for a set of curies.
 

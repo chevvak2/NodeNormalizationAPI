@@ -1,10 +1,10 @@
-from biothings.web.handlers import BaseAPIHandler
+from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
-from nodenorm.handlers.biolink import toolkit
+from nodenorm.biolink import toolkit
 
 
-class SemanticTypeHandler(BaseAPIHandler):
+class SemanticTypeHandler(BaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs
@@ -18,9 +18,9 @@ class SemanticTypeHandler(BaseAPIHandler):
         type_aggregation = {"unique_types": {"terms": {"field": "type", "size": 100}}}
         source_fields = ["type"]
         try:
-            index = self.biothings.elasticsearch.metadata.indices["node"]
+            search_indices = self.biothings.elasticsearch.indices
             type_aggregation_result = await self.biothings.elasticsearch.async_client.search(
-                aggregations=type_aggregation, index=index, size=0, source_includes=source_fields
+                aggregations=type_aggregation, index=search_indices, size=0, source_includes=source_fields
             )
         except Exception as gen_exc:
             network_error = HTTPError(
@@ -42,9 +42,9 @@ class SemanticTypeHandler(BaseAPIHandler):
         type_aggregation = {"unique_types": {"terms": {"field": "type", "size": 100}}}
         source_fields = ["type"]
         try:
-            index = self.biothings.elasticsearch.metadata.indices["node"]
+            search_indices = self.biothings.elasticsearch.indices
             type_aggregation_result = await self.biothings.elasticsearch.async_client.search(
-                aggregations=type_aggregation, index=index, size=0, source_includes=source_fields
+                aggregations=type_aggregation, index=search_indices, size=0, source_includes=source_fields
             )
         except Exception as gen_exc:
             network_error = HTTPError(

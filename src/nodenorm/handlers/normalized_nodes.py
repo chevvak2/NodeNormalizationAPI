@@ -1,13 +1,14 @@
 import dataclasses
+import json
 import logging
 import time
 from typing import Union
 
-from biothings.web.handlers import BaseAPIHandler
-from biothings.web.services.namespace import BiothingsNamespace
+from biothings.web.handlers import BaseHandler
 from tornado.web import HTTPError
 
-from nodenorm.handlers.biolink import toolkit
+from nodenorm.biolink import toolkit
+from nodenorm.namespace import NodeNormalizationAPINamespace
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -24,7 +25,7 @@ class NormalizedNode:
     taxa: list[str]
 
 
-class NormalizedNodesHandler(BaseAPIHandler):
+class NormalizedNodesHandler(BaseHandler):
     """
     Mirror implementation to the renci implementation found at
     https://nodenormalization-sri.renci.org/docs
@@ -131,17 +132,17 @@ class NormalizedNodesHandler(BaseAPIHandler):
           }
         }
         """
-        breakpoint()
-        normalization_curies = self.args_json.get("curies", [])
+        post_body: dict = json.loads(self.request.body)
+        normalization_curies = post_body.get("curies", [])
         if len(normalization_curies) == 0:
             raise HTTPError(
                 detail="Missing curie argument, there must be at least one curie to normalize", status_code=400
             )
 
-        conflate = self.args_json.get("conflate", True)
-        drug_chemical_conflate = self.args_json.get("drug_chemical_conflate", False)
-        description = self.args_json.get("description", False)
-        individual_types = self.args_json.get("individual_types", False)
+        conflate = post_body.get("conflate", True)
+        drug_chemical_conflate = post_body.get("drug_chemical_conflate", False)
+        description = post_body.get("description", False)
+        individual_types = post_body.get("individual_types", False)
 
         normalized_nodes = await get_normalized_nodes(
             self.biothings,
@@ -161,7 +162,7 @@ class NormalizedNodesHandler(BaseAPIHandler):
 
 
 async def get_normalized_nodes(
-    biothings_metadata: BiothingsNamespace,
+    biothings_metadata: NodeNormalizationAPINamespace,
     curies: list[str],
     conflate_gene_protein: bool = False,
     conflate_chemical_drug: bool = False,
@@ -293,7 +294,7 @@ async def create_normalized_node(
 
 
 async def _lookup_curie_metadata(
-    biothings_metadata: BiothingsNamespace, curies: list[str], conflations: dict
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str], conflations: dict
 ) -> list[NormalizedNode]:
     """
     Handles the lookup process for the CURIE identifiers within our elasticsearch instance
@@ -393,8 +394,6 @@ async def _lookup_curie_metadata(
 
                 replacement_types = unique_list(replacement_types)
 
-                labels = [identifier.get("l", "") for identifier in replacement_identifiers]
-
                 node = NormalizedNode(
                     curie=input_curie,
                     canonical_identifier=canonical_identifier,
@@ -406,7 +405,6 @@ async def _lookup_curie_metadata(
                 )
                 nodes.append(node)
             else:
-                labels = [identifier.get("l", "") for identifier in identifiers]
                 node = NormalizedNode(
                     curie=input_curie,
                     canonical_identifier=canonical_identifier,
@@ -454,16 +452,16 @@ def unique_list(seq) -> list:
 
 
 async def _lookup_equivalent_identifiers(
-    biothings_metadata: BiothingsNamespace, curies: list[str]
+    biothings_metadata: NodeNormalizationAPINamespace, curies: list[str]
 ) -> tuple[list, list]:
     if len(curies) == 0:
         return [], []
 
     curie_terms_query = {"bool": {"filter": [{"terms": {"identifiers.i": curies}}]}}
     source_fields = ["identifiers", "type", "ic", "preferred_name", "taxa"]
-    index = biothings_metadata.elasticsearch.metadata.indices["node"]
+    search_indices = biothings_metadata.elasticsearch.indices
     term_search_result = await biothings_metadata.elasticsearch.async_client.search(
-        query=curie_terms_query, index=index, size=len(curies), source_includes=source_fields
+        query=curie_terms_query, index=search_indices, size=len(curies), source_includes=source_fields
     )
 
     # Post processing to ensure we can identify invalid curies provided by the query
