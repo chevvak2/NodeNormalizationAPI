@@ -2,7 +2,7 @@ FROM python:3.12 AS builder
 
 ARG BUILD_VERSION=dev
 WORKDIR /build/nodenorm
-COPY .. .
+COPY . .
 RUN echo "${BUILD_VERSION}" > /build/nodenorm/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/nodenorm
 

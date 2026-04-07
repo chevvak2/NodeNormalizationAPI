@@ -44,15 +44,13 @@ pipeline {
         stage('Build Docker') {
            when { expression { return env.BUILD == 'true' }}
             steps {
-                dir(env.PACKAGE_DIR) {
-                   script {
-                       sh '''
-                          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 853771734544.dkr.ecr.us-east-1.amazonaws.com
-                          '''
-                       docker.build(env.DOCKER_REPO_NAME, "--build-arg BUILD_VERSION=${BUILD_VERSION} --no-cache ./")
-                          docker.image(env.DOCKER_REPO_NAME).push("${BUILD_VERSION}")
-                    }
-                }
+                script {
+                    sh '''
+                       aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 853771734544.dkr.ecr.us-east-1.amazonaws.com
+                       '''
+                    docker.build(env.DOCKER_REPO_NAME, "--build-arg BUILD_VERSION=${BUILD_VERSION} -f docker/Dockerfile --no-cache .")
+                       docker.image(env.DOCKER_REPO_NAME).push("${BUILD_VERSION}")
+                 }
             }
         }
         stage('Deploy to AWS EKS Blue') {
