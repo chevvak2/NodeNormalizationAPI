@@ -1,4 +1,4 @@
-# Default values for biothings-annotator.
+# Default values for node-normalization-api.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -20,7 +20,7 @@ image:
   tag: DOCKER_VERSION_VALUE
 
 containers:
-  name: biothingsannotator
+  name: nodenormalizationapi
   es_host: ES_HOST_VALUE
   port: 9000
 
