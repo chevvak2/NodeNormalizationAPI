@@ -25,7 +25,7 @@ pipeline {
             when { expression { return !params.BUILD_VERSION } }
             steps{
                 script {
-                    BUILD_VERSION_GENERATED = VersionNumber(
+                    def BUILD_VERSION_GENERATED = VersionNumber(
                         versionNumberString: 'v${BUILD_YEAR, XX}.${BUILD_MONTH, XX}${BUILD_DAY, XX}.${BUILDS_TODAY}',
                         projectStartDate:    '1970-01-01',
                         skipFailedBuilds:    true)
@@ -49,7 +49,7 @@ pipeline {
                        sh '''
                           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 853771734544.dkr.ecr.us-east-1.amazonaws.com
                           '''
-                       docker.build(env.DOCKER_REPO_NAME, "--build-arg SOURCE_FOLDER=./${BUILD_VERSION} --no-cache ./")
+                       docker.build(env.DOCKER_REPO_NAME, "--build-arg BUILD_VERSION=${BUILD_VERSION} --no-cache ./")
                           docker.image(env.DOCKER_REPO_NAME).push("${BUILD_VERSION}")
                     }
                 }
