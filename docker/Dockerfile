@@ -1,9 +1,7 @@
 FROM python:3.12 AS builder
 
-ARG SOURCE_FOLDER=./v2026.0407.1
-
 WORKDIR /build/nodenorm
-COPY ${SOURCE_FOLDER} .
+COPY . .
 RUN git rev-parse HEAD > /build/nodenorm/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/nodenorm
 
@@ -32,7 +30,8 @@ COPY --from=caddy_builder --chown=nodenorm:nodenorm /usr/bin/caddy /usr/bin/cadd
 STOPSIGNAL SIGINT
 EXPOSE 9000
 
-ENTRYPOINT ["supervisord"]
+ENTRYPOINT ["supervisord", "-n"]
+CMD []
 CMD ["-c", "/etc/supervisor/supervisord.conf"]
 
 ENTRYPOINT ["supervisord"]
