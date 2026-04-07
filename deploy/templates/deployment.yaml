@@ -29,6 +29,8 @@ spec:
           env:
             - name: ES_HOST
               value: {{ .Values.containers.es_host }}
+            - name: PORT
+              value: "{{ .Values.containers.port }}"
             - name: OPENTELEMETRY_ENABLED
               value: "{{ .Values.containers.OPENTELEMETRY_ENABLED_VALUE }}"  
             - name: OPENTELEMETRY_JAEGER_HOST
