@@ -1,10 +1,9 @@
 FROM python:3.12 AS builder
 
-ARG NODENORM_REPO=https://github.com/biothings/NodeNormalizationAPI.git
-ARG NODENORM_BRANCH=main
+ARG SOURCE_FOLDER=./v2026.0407.1
 
 WORKDIR /build/nodenorm
-RUN git clone -b ${NODENORM_BRANCH} --recursive ${NODENORM_REPO} .
+COPY ${SOURCE_FOLDER} .
 RUN git rev-parse HEAD > /build/nodenorm/version.txt
 RUN pip wheel --wheel-dir=/build/wheels /build/nodenorm
 
@@ -21,7 +20,7 @@ COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheel
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
 
 WORKDIR /home/nodenorm/configuration
-COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/nodenorm/application/configuration/default.json /home/nodenorm/configuration
+COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/application/configuration/default.json /home/nodenorm/configuration
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/docker/configuration/supervisord.conf /etc/supervisor/supervisord.conf
@@ -32,6 +31,9 @@ COPY --from=caddy_builder --chown=nodenorm:nodenorm /usr/bin/caddy /usr/bin/cadd
 
 STOPSIGNAL SIGINT
 EXPOSE 9000
+
+ENTRYPOINT ["supervisord"]
+CMD ["-c", "/etc/supervisor/supervisord.conf"]
 
 ENTRYPOINT ["supervisord"]
 CMD ["-c", "/etc/supervisor/supervisord.conf"]

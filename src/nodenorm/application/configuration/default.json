@@ -1,0 +1,42 @@
+{
+    "webserver": {
+        "HOST": "localhost",
+        "PORT": 8000,
+        "ENABLE_CURL_CLIENT": true,
+        "SETTINGS": {
+            "debug": true,
+            "autoreload": true
+        }
+    },
+    "api": {
+        "API_PREFIX": "nodenorm",
+        "API_VERSION": ""
+    },
+    "elasticsearch": {
+        "ES_HOST": "http://localhost:9200",
+        "ES_INDEX": "nodenorm",
+        "ES_ALIAS": "nodenorm",
+        "ES_DOC_TYPE": "node",
+        "ES_INDICES": {},
+        "ES_ARGS": {
+            "sniff": false,
+            "request_timeout": 60
+        }
+    },
+    "telemetry": {
+        "OPENTELEMETRY_ENABLED": false,
+        "OPENTELEMETRY_SERVICE_NAME": "NodeNorm",
+        "OPENTELEMETRY_JAEGER_HOST": "http://localhost",
+        "OPENTELEMETRY_JAEGER_PORT": 6831,
+        "OPENTELEMETRY_JAEGER_AGENT_HOST": "jaeger",
+        "OPENTELEMETRY_JAEGER_AGENT_PORT": 6831,
+        "OPENTELEMETRY_COLLECTOR_ENDPOINT": "http://jaeger-collector:14268/api/traces?format=jaeger.thrift",
+        "OPENTELEMETRY_COLLECTOR_TIMEOUT": 30000,
+        "OPENTELEMETRY_JAEGER_ENDPOINT": "http://jaeger-collector:14268/api/traces?format=jaeger.thrift",
+        "OPENTELEMETRY_JAEGER_TIMEOUT": 30000,
+        "OPENTELEMETRY_BATCH_SPAN_PROCESSOR_INTERVAL_SECONDS": 1,
+        "OPENTELEMETRY_BATCH_SPAN_PROCESSOR_TIMEOUT_SECONDS": 30,
+        "OPENTELEMETRY_BATCH_SPAN_PROCESSOR_MAX_QUEUE_SIZE": 2048,
+        "OPENTELEMETRY_BATCH_SPAN_PROCESSOR_MAX_EXPORT_BATCH_SIZE": 512
+    }
+}
