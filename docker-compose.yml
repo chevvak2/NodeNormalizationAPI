@@ -1,0 +1,12 @@
+name: nodenorm
+services:
+  nodenorm:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+      args:
+        - ARG NODENORM_REPO=https://github.com/biothings/NodeNormalizationAPI.git
+        - ARG NODENORM_BRANCH=main
+    container_name: nodenorm
+    ports:
+      - 9000:9000
