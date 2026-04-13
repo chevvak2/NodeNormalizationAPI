@@ -27,12 +27,14 @@ WORKDIR /home/nodenorm/configuration
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/src/nodenorm/config/config.default.json /home/nodenorm/configuration/default.json
 COPY --from=builder --chown=nodenorm:nodenorm /build/nodenorm/version.txt /home/nodenorm/configuration/version.txt
 
+# Override with corrected configuration
+COPY --chown=nodenorm:nodenorm configuration/config.json /home/nodenorm/configuration/config.json
+
 # Switch back to root for system-level operations
 USER root
 COPY configuration/supervisord.conf /etc/supervisor/supervisord.conf
 COPY configuration/Caddyfile /etc/caddy/Caddyfile
 COPY --from=caddy_builder /usr/bin/caddy /usr/bin/caddy
-
 # Switch back to nodenorm user for runtime
 USER nodenorm
 
