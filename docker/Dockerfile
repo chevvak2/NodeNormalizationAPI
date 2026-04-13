@@ -16,6 +16,9 @@ RUN apt update -q -y && apt install -y --no-install-recommends git supervisor cu
 RUN useradd -m nodenorm && usermod -aG sudo nodenorm
 USER nodenorm
 WORKDIR /home/nodenorm/
+# Set PyStow home directory to a writable location
+ENV PYSTOW_HOME=/home/nodenorm/.pystow
+RUN mkdir -p /home/nodenorm/.pystow
 RUN python -m venv /home/nodenorm/venv
 COPY --from=builder --chown=nodenorm:nodenorm /build/wheels /home/nodenorm/wheels
 RUN /home/nodenorm/venv/bin/pip install /home/nodenorm/wheels/*.whl && rm -rf /home/nodenorm/wheels
@@ -35,7 +38,7 @@ USER nodenorm
 
 
 STOPSIGNAL SIGINT
-EXPOSE 9000
+EXPOSE 8000
 
 # Run supervisord as root to manage processes 
 USER root
