@@ -14,7 +14,7 @@ deployment:
       # A new pod will only be created after an old pod is taken down.
       maxSurge: 0
 image:
-  repository: 853771734544.dkr.ecr.us-east-1.amazonaws.com/translator-node-normalization-api
+  repository: 853771734544.dkr.ecr.us-east-1.amazonaws.com/translator-nodenormalization-api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: DOCKER_VERSION_VALUE
