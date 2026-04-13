@@ -1,5 +1,5 @@
 :8000 {
-	reverse_proxy localhost:8000
+	reverse_proxy localhost:9001
 	encode zstd gzip
   log {
     output stdout
