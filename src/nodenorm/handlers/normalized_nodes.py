@@ -304,7 +304,7 @@ async def _lookup_curie_metadata(
     specified by index.max_terms_count is 65536 (2**16), we should be well under given our
     usual maximum query size is ~3000 CURIE identifiers
 
-    We most also be careful though as the terms query is simply checking if any document
+    We must also be careful though as the terms query is simply checking if any document
     contains at least one of the terms. We expect a 1-1 matching for CURIE identifier to
     document, so we can determine which terms were not found via set difference between the
     returned document CURIE identifiers and the user provided set of CURIE identifiers
