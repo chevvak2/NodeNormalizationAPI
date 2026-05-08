@@ -370,34 +370,17 @@ async def _lookup_curie_metadata(
                 for conflation_curie in conflation_identifiers:
                     if conflation_curie in malformed_conflation_curies:
                         skipped_conflation_curies.append(conflation_curie)
-                        logger.warning(
-                            "Unable to resolve conflation CURIE %s while normalizing %s; skipping it.",
-                            conflation_curie,
-                            input_curie,
-                        )
                         continue
 
                     conflation_result = conflation_result_lookup.get(conflation_curie)
                     if not conflation_result:
                         skipped_conflation_curies.append(conflation_curie)
-                        logger.warning(
-                            "No lookup result found for conflation CURIE %s while normalizing %s; skipping it.",
-                            conflation_curie,
-                            input_curie,
-                        )
                         continue
 
                     conflation_biolink_type = conflation_result.get("_source", {}).get("type", [])
                     conflation_identifier_lookup = conflation_result.get("_source", {}).get("identifiers", [])
                     if not conflation_identifier_lookup:
                         skipped_conflation_curies.append(conflation_curie)
-                        logger.warning(
-                            "Conflation CURIE %s resolved to document %s with no identifiers while normalizing %s; "
-                            "skipping it.",
-                            conflation_curie,
-                            conflation_result.get("_id"),
-                            input_curie,
-                        )
                         continue
 
                     for conflation_entry in conflation_identifier_lookup:
@@ -418,7 +401,7 @@ async def _lookup_curie_metadata(
                 replacement_types = unique_list(replacement_types)
 
                 if not replacement_identifiers:
-                    logger.error(
+                    logger.warning(
                         "Unable to resolve any conflation CURIEs for %s; falling back to base normalized node. "
                         "Skipped conflation CURIEs: %s",
                         input_curie,
@@ -443,6 +426,13 @@ async def _lookup_curie_metadata(
                         types=replacement_types,
                         taxa=taxa,
                     )
+                    if skipped_conflation_curies:
+                        logger.warning(
+                            "Skipped %s conflation CURIEs while normalizing %s: %s",
+                            len(skipped_conflation_curies),
+                            input_curie,
+                            skipped_conflation_curies[:10],
+                        )
                 nodes.append(node)
             else:
                 node = NormalizedNode(
@@ -502,7 +492,7 @@ async def _lookup_equivalent_identifiers(
 
     searches = []
     for curie in curies:
-        searches.append({"index": search_indices})
+        searches.append({})
         searches.append(
             {
                 "query": {"bool": {"filter": [{"terms": {"identifiers.i": [curie]}}]}},
@@ -513,13 +503,21 @@ async def _lookup_equivalent_identifiers(
         )
 
     msearch_result = await biothings_metadata.elasticsearch.async_client.msearch(
+        index=search_indices,
         searches=searches,
     )
 
     # Post processing to ensure we can identify invalid curies provided by the query
     identifier_result_lookup = {}
     malformed_curies = set()
-    for curie, response in zip(curies, msearch_result.body["responses"]):
+    responses = msearch_result.body["responses"]
+    if len(responses) != len(curies):
+        raise RuntimeError(
+            f"Elasticsearch msearch returned {len(responses)} responses for {len(curies)} CURIEs; "
+            "unable to safely align lookup results."
+        )
+
+    for curie, response in zip(curies, responses):
         if "error" in response:
             raise RuntimeError(f"Elasticsearch msearch failed for CURIE {curie}: {response['error']}")
 
