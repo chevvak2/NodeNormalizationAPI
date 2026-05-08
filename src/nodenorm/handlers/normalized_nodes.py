@@ -365,11 +365,40 @@ async def _lookup_curie_metadata(
 
                 replacement_identifiers = []
                 replacement_types = []
+                skipped_conflation_curies = []
                 conflation_label_discovered = False
                 for conflation_curie in conflation_identifiers:
-                    conflation_result = conflation_result_lookup.get(conflation_curie, {})
+                    if conflation_curie in malformed_conflation_curies:
+                        skipped_conflation_curies.append(conflation_curie)
+                        logger.warning(
+                            "Unable to resolve conflation CURIE %s while normalizing %s; skipping it.",
+                            conflation_curie,
+                            input_curie,
+                        )
+                        continue
+
+                    conflation_result = conflation_result_lookup.get(conflation_curie)
+                    if not conflation_result:
+                        skipped_conflation_curies.append(conflation_curie)
+                        logger.warning(
+                            "No lookup result found for conflation CURIE %s while normalizing %s; skipping it.",
+                            conflation_curie,
+                            input_curie,
+                        )
+                        continue
+
                     conflation_biolink_type = conflation_result.get("_source", {}).get("type", [])
                     conflation_identifier_lookup = conflation_result.get("_source", {}).get("identifiers", [])
+                    if not conflation_identifier_lookup:
+                        skipped_conflation_curies.append(conflation_curie)
+                        logger.warning(
+                            "Conflation CURIE %s resolved to document %s with no identifiers while normalizing %s; "
+                            "skipping it.",
+                            conflation_curie,
+                            conflation_result.get("_id"),
+                            input_curie,
+                        )
+                        continue
 
                     for conflation_entry in conflation_identifier_lookup:
                         conflation_entry.update({"t": [conflation_biolink_type]})
@@ -388,15 +417,32 @@ async def _lookup_curie_metadata(
 
                 replacement_types = unique_list(replacement_types)
 
-                node = NormalizedNode(
-                    curie=input_curie,
-                    canonical_identifier=canonical_identifier,
-                    preferred_label=preferred_label,
-                    information_content=information_content,
-                    identifiers=replacement_identifiers,
-                    types=replacement_types,
-                    taxa=taxa,
-                )
+                if not replacement_identifiers:
+                    logger.error(
+                        "Unable to resolve any conflation CURIEs for %s; falling back to base normalized node. "
+                        "Skipped conflation CURIEs: %s",
+                        input_curie,
+                        skipped_conflation_curies or conflation_identifiers,
+                    )
+                    node = NormalizedNode(
+                        curie=input_curie,
+                        canonical_identifier=canonical_identifier,
+                        preferred_label=preferred_label,
+                        information_content=information_content,
+                        identifiers=identifiers,
+                        types=node_types,
+                        taxa=taxa,
+                    )
+                else:
+                    node = NormalizedNode(
+                        curie=input_curie,
+                        canonical_identifier=canonical_identifier,
+                        preferred_label=preferred_label,
+                        information_content=information_content,
+                        identifiers=replacement_identifiers,
+                        types=replacement_types,
+                        taxa=taxa,
+                    )
                 nodes.append(node)
             else:
                 node = NormalizedNode(
