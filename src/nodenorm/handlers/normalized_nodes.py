@@ -299,15 +299,9 @@ async def _lookup_curie_metadata(
     """
     Handles the lookup process for the CURIE identifiers within our elasticsearch instance
 
-    Ported from the redis instance, this performs one set of batch lookup calls via a singular
-    terms query with the entire set of curies. Given the default maximum amount of terms queries
-    specified by index.max_terms_count is 65536 (2**16), we should be well under given our
-    usual maximum query size is ~3000 CURIE identifiers
-
-    We most also be careful though as the terms query is simply checking if any document
-    contains at least one of the terms. We expect a 1-1 matching for CURIE identifier to
-    document, so we can determine which terms were not found via set difference between the
-    returned document CURIE identifiers and the user provided set of CURIE identifiers
+    Ported from the redis instance, this performs one batch lookup call through Elasticsearch
+    msearch, with one size-1 search per input CURIE. We expect a 1-1 mapping for CURIE
+    identifier to document; upstream data processing is responsible for resolving duplicates.
     """
     identifier_result_lookup, malformed_curies = await _lookup_equivalent_identifiers(biothings_metadata, curies)
 
@@ -371,11 +365,23 @@ async def _lookup_curie_metadata(
 
                 replacement_identifiers = []
                 replacement_types = []
+                skipped_conflation_curies = []
                 conflation_label_discovered = False
                 for conflation_curie in conflation_identifiers:
-                    conflation_result = conflation_result_lookup.get(conflation_curie, {})
+                    if conflation_curie in malformed_conflation_curies:
+                        skipped_conflation_curies.append(conflation_curie)
+                        continue
+
+                    conflation_result = conflation_result_lookup.get(conflation_curie)
+                    if not conflation_result:
+                        skipped_conflation_curies.append(conflation_curie)
+                        continue
+
                     conflation_biolink_type = conflation_result.get("_source", {}).get("type", [])
                     conflation_identifier_lookup = conflation_result.get("_source", {}).get("identifiers", [])
+                    if not conflation_identifier_lookup:
+                        skipped_conflation_curies.append(conflation_curie)
+                        continue
 
                     for conflation_entry in conflation_identifier_lookup:
                         conflation_entry.update({"t": [conflation_biolink_type]})
@@ -394,15 +400,39 @@ async def _lookup_curie_metadata(
 
                 replacement_types = unique_list(replacement_types)
 
-                node = NormalizedNode(
-                    curie=input_curie,
-                    canonical_identifier=canonical_identifier,
-                    preferred_label=preferred_label,
-                    information_content=information_content,
-                    identifiers=replacement_identifiers,
-                    types=replacement_types,
-                    taxa=taxa,
-                )
+                if not replacement_identifiers:
+                    logger.warning(
+                        "Unable to resolve any conflation CURIEs for %s; falling back to base normalized node. "
+                        "Skipped conflation CURIEs: %s",
+                        input_curie,
+                        skipped_conflation_curies or conflation_identifiers,
+                    )
+                    node = NormalizedNode(
+                        curie=input_curie,
+                        canonical_identifier=canonical_identifier,
+                        preferred_label=preferred_label,
+                        information_content=information_content,
+                        identifiers=identifiers,
+                        types=node_types,
+                        taxa=taxa,
+                    )
+                else:
+                    node = NormalizedNode(
+                        curie=input_curie,
+                        canonical_identifier=canonical_identifier,
+                        preferred_label=preferred_label,
+                        information_content=information_content,
+                        identifiers=replacement_identifiers,
+                        types=replacement_types,
+                        taxa=taxa,
+                    )
+                    if skipped_conflation_curies:
+                        logger.warning(
+                            "Skipped %s conflation CURIEs while normalizing %s: %s",
+                            len(skipped_conflation_curies),
+                            input_curie,
+                            skipped_conflation_curies[:10],
+                        )
                 nodes.append(node)
             else:
                 node = NormalizedNode(
@@ -453,26 +483,62 @@ def unique_list(seq) -> list:
 
 async def _lookup_equivalent_identifiers(
     biothings_metadata: NodeNormalizationAPINamespace, curies: list[str]
-) -> tuple[list, list]:
+) -> tuple[dict, set]:
     if len(curies) == 0:
-        return [], []
+        return {}, set()
 
-    curie_terms_query = {"bool": {"filter": [{"terms": {"identifiers.i": curies}}]}}
     source_fields = ["identifiers", "type", "ic", "preferred_name", "taxa"]
     search_indices = biothings_metadata.elasticsearch.indices
-    term_search_result = await biothings_metadata.elasticsearch.async_client.search(
-        query=curie_terms_query, index=search_indices, size=len(curies), source_includes=source_fields
+
+    searches = []
+    for curie in curies:
+        searches.append({})
+        searches.append(
+            {
+                "query": {"bool": {"filter": [{"terms": {"identifiers.i": [curie]}}]}},
+                "size": 1,
+                "track_total_hits": True,
+                "_source": source_fields,
+            }
+        )
+
+    msearch_result = await biothings_metadata.elasticsearch.async_client.msearch(
+        index=search_indices,
+        searches=searches,
     )
 
     # Post processing to ensure we can identify invalid curies provided by the query
-    identifiers_set = set()
     identifier_result_lookup = {}
-    for result in term_search_result.body["hits"]["hits"]:
-        identifiers = result.get("_source", {}).get("identifiers", [])
-        for identifier in identifiers:
-            equivalent_identifier = identifier.get("i", None)
-            identifiers_set.add(equivalent_identifier)
-            identifier_result_lookup[equivalent_identifier] = result
+    malformed_curies = set()
+    responses = msearch_result.body["responses"]
+    if len(responses) != len(curies):
+        raise RuntimeError(
+            f"Elasticsearch msearch returned {len(responses)} responses for {len(curies)} CURIEs; "
+            "unable to safely align lookup results."
+        )
 
-    malformed_curies = set(curies) - identifiers_set
+    for curie, response in zip(curies, responses):
+        if "error" in response:
+            raise RuntimeError(f"Elasticsearch msearch failed for CURIE {curie}: {response['error']}")
+
+        hits_metadata = response.get("hits", {})
+        total_hits = hits_metadata.get("total", 0)
+        if isinstance(total_hits, dict):
+            total_hits = total_hits.get("value", 0)
+
+        hits = hits_metadata.get("hits", [])
+        if len(hits) == 0:
+            malformed_curies.add(curie)
+            continue
+
+        if total_hits > 1:
+            logger.warning(
+                "Expected 1 Elasticsearch document for CURIE %s but found %s. Returning first hit %s.",
+                curie,
+                total_hits,
+                hits[0].get("_id"),
+            )
+
+        identifier_result_lookup[curie] = hits[0]
+
     return identifier_result_lookup, malformed_curies
